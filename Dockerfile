@@ -125,11 +125,29 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # openai api server alternative
 FROM aphrodite-base AS aphrodite-openai
 
-# install additional dependencies for openai api server
+# Install additional dependencies for OpenAI API server
 RUN --mount=type=cache,target=/root/.cache/pip \
     python3 -m pip install accelerate hf_transfer 'modelscope!=1.15.0'
 
-ENV NUMBA_CACHE_DIR=$HOME/.numba_cache
+# Set Hugging Face cache directory (optional)
+ENV HF_HOME=/workspace/hf_cache
+ENV MODEL_DIR=/workspace/model
 
+# Create the model directory
+RUN mkdir -p ${MODEL_DIR}
+
+# Conditional model download (only if MODEL_URL is provided)
+RUN if [ ! -z "$MODEL_URL" ]; then \
+        echo "Downloading model from $MODEL_URL..."; \
+        huggingface-cli download "$MODEL_URL" --local-dir ${MODEL_DIR} --local-dir-use-symlinks False; \
+        MODEL_FILE=$(find ${MODEL_DIR} -name '*.gguf' | head -n 1); \
+        echo "Model downloaded to $MODEL_FILE"; \
+        echo "MODEL_NAME=$MODEL_FILE" >> /etc/environment; \
+    fi
+
+# Load the dynamically set MODEL_NAME
+RUN export $(cat /etc/environment)
+
+# Set Aphrodite to run with the downloaded model
 ENTRYPOINT ["python3", "-m", "aphrodite.endpoints.openai.api_server"]
 #################### OPENAI API SERVER ####################
